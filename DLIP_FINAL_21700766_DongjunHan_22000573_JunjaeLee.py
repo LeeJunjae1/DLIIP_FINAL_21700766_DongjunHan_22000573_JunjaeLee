@@ -30,7 +30,7 @@ except serial.SerialException as e:
 
     
 
-video_path = "./soccer/new3_red_blue3.mp4" #비디오 경로
+video_path = "./soccer/new3_red_blue.mp4" #비디오 경로
 cap = cv2.VideoCapture(video_path)
 model = YOLO("yolov8x.pt") #기존에 yolo 모델
 
@@ -910,22 +910,21 @@ if goal_frame is not 0:
     from email.message import EmailMessage
 
     # 발신자 이메일
-    sender_email = "22000573@handong.ac.kr"
+    sender_email = "????@handong.ac.kr"
     receiver_email = None  # 수신자 이메일은 골 상황에 따라 설정
 
     # 골 상황에 따라 수신자 결정
     if red_team_goal_flag == 1:
-        receiver_email = "junjae2764@gmail.com"
-        #receiver_email = "ykkim@handong.edu"  # (선택적으로 교수님에게 전송 가능)
+        receiver_email = "????@gmail.com"
     elif blue_team_goal_flag == 1:
-        receiver_email = "21700766@handong.ac.kr"
+        receiver_email = "????@handong.ac.kr"
 
     # 이메일 제목 및 본문
     subject = "Highlight Video"
     body = "첨부된 영상은 하이라이트 영상입니다."
 
     # Gmail 앱 비밀번호 (2단계 인증 사용 시 앱 비밀번호 필요), 사용자 설정에 따라 변경이 필요함
-    password = "rfgm eqpq xpkr qwsh"
+    password = "???? ???? ???? ????"
 
     # 수신자가 설정된 경우에만 이메일 전송
     if receiver_email:
@@ -949,4 +948,3 @@ if goal_frame is not 0:
         print("이메일 전송 완료!")
     else:
         print("goal flag가 감지되지 않아 이메일을 전송하지 않았습니다.")
-
