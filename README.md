@@ -6,7 +6,7 @@
 
 **Github:**  [repository link](https://github.com/LeeJunjae1/DLIIP_FINAL_21700766_DongjunHan_22000573_JunjaeLee)
 
-**PDF version:** [PDF](./DLIP_Final_21700766_DongjunHan_22000573_JunjaeLee.pdf)
+**PDF version:** [PDF](./DLIP_FINAL_21700766_DongjunHan_22000573_JunjaeLee.pdf)
 
 **Demo Video**: [Youtube_link](https://www.youtube.com/watch?v=00-XCQsEvEs)
 
@@ -103,7 +103,7 @@
 
 #### **Dataset link**: 
 
-- Football Video: [[축구드론영상\] VITNA FC 축구]([[축구드론영상\] VITNA FC 축구 | 2023년11월4일 - YouTube](https://www.youtube.com/watch?v=ZCv8W7u1-7A&t=1143s))
+- Football Video: [축구드론영상\ VITNA FC 축구]([[축구드론영상\] VITNA FC 축구 | 2023년11월4일 - YouTube](https://www.youtube.com/watch?v=ZCv8W7u1-7A&t=1143s))
 
 
 
@@ -453,28 +453,34 @@ except serial.SerialException as e:
 
 ``` python
 # 6. 시리얼 전송 (항상 시도)
-    if ser:
-        try:
-            # 1. 이벤트 전송 우선 (변화 있을 때만)
-            current_event = ""
-            if goal_flag:
-                current_event = "GOAL"
-            elif throwin_flag:
-                current_event = "THROWIN"
-            elif goal_line_flag:
-                current_event = "OUT"
+if ser:  # 시리얼 포트가 정상적으로 열려 있는 경우에만 실행
+    try:
+        # 1. 이벤트 전송 우선 (변화 있을 때만)
+        current_event = ""  # 현재 이벤트를 저장할 변수 초기화
 
-            if current_event != "" :
-                ser.write(f"{current_event}\n".encode())
+        if goal_flag:
+            current_event = "GOAL"  # 골이 발생했을 경우 "GOAL" 이벤트로 설정
+        elif throwin_flag:
+            current_event = "THROWIN"  # 스로인 상황이면 "THROWIN"
+        elif goal_line_flag:
+            current_event = "OUT"  # 공이 골라인을 벗어난 경우 "OUT"
 
-            # 2. 점유율 전송 (항상 또는 주기적 혹은 변화가 있을 때만)
-            current_possession = f"{int(red_pct)},{int(blue_pct)}"
-            if current_possession != last_possession_sent:
-                ser.write(f"{current_possession}\n".encode())
-                last_possession_sent = current_possession
+        if current_event != "":
+            # 이벤트가 발생한 경우 (빈 문자열이 아니면) 시리얼로 전송
+            ser.write(f"{current_event}\n".encode())
 
-        except serial.SerialException:
-            print("시리얼 전송 실패")
+        # 2. 점유율 전송 (항상 또는 주기적 혹은 변화가 있을 때만)
+        current_possession = f"{int(red_pct)},{int(blue_pct)}"
+
+        if current_possession != last_possession_sent:
+            # 이전에 보낸 점유율과 다를 경우에만 전송하여 중복 전송 방지
+            ser.write(f"{current_possession}\n".encode())
+            last_possession_sent = current_possession  # 마지막으로 보낸 점유율 갱신
+
+    except serial.SerialException:
+        # 시리얼 통신 중 오류 발생 시 출력
+        print("시리얼 전송 실패")
+
 ```
 
 
@@ -494,15 +500,22 @@ except serial.SerialException as e:
 * Since areas outside the field lines are not of interest, masking is applied to exclude them.
 
 ```python
+# 필드 라인따기 (필드 외곽 테두리만 추출하기 위한 마스크 생성 함수)
 def get_border_mask(frame):
-    h, w = frame.shape[:2]
-    mask = np.zeros((h, w), dtype=np.uint8)
-    #ROI 선택 진행
+    h, w = frame.shape[:2]  # 프레임의 높이(h)와 너비(w)를 가져옴
+
+    mask = np.zeros((h, w), dtype=np.uint8)  # 동일한 크기의 검은색 마스크 이미지 생성 (초기값 0)
+
+    # ROI(관심 영역, Region of Interest) 설정: 필드 외곽 영역 다각형
     outer_polygon = np.array([[750, 40], [480, 995], [1760, 995], [1350, 40]])
-    cv2.fillPoly(mask, [outer_polygon], 255)
+    cv2.fillPoly(mask, [outer_polygon], 255)  # 외곽 다각형 부분을 흰색(255)으로 채움
+
+    # 내부 영역 설정: 필드 중앙 쪽을 다시 0으로 만들어 테두리만 남김
     inner_polygon = np.array([[780, 60], [550, 955], [1680, 955], [1320, 60]])
-    cv2.fillPoly(mask, [inner_polygon], 0)
-    return mask
+    cv2.fillPoly(mask, [inner_polygon], 0)  # 내부 다각형 영역을 다시 검정색(0)으로 덮어 지움
+
+    return mask  # 최종적으로 테두리만 남은 마스크 반환
+
 ```
 
 
@@ -513,28 +526,37 @@ def get_border_mask(frame):
 
 ```python
 def intersection(line1, line2):
-    # 두 직선의 교점 계산
+    # 두 직선(line1, line2)의 교점을 계산하는 함수
+    # 각 직선은 기울기(m)와 y절편(b)으로 표현됨: y = mx + b
     m1, b1 = line1
     m2, b2 = line2
-    
-    # 수직선 처리: m=None 이면 x=b 가 직선
+
+    # 1. 둘 다 수직선인 경우 (기울기가 없음): x = b 형태 -> 교점 없음
     if m1 is None and m2 is None:
-        return None  # 평행 수직선 (교점 없음)
-    if m1 is None:  # line1 수직선
-        x = b1
-        y = m2 * x + b2
+        return None  # 두 수직선이 평행하면 교점 없음
+
+    # 2. 첫 번째 선만 수직선인 경우: x = b1
+    if m1 is None:
+        x = b1  # 수직선은 x=b1 이므로 x 좌표는 b1
+        y = m2 * x + b2  # 두 번째 선의 y 값을 계산
+        return int(x), int(y)  # 정수형 좌표로 반환
+
+    # 3. 두 번째 선만 수직선인 경우: x = b2
+    if m2 is None:
+        x = b2  # x 좌표는 b2
+        y = m1 * x + b1  # 첫 번째 선에서의 y값 계산
         return int(x), int(y)
-    if m2 is None:  # line2 수직선
-        x = b2
-        y = m1 * x + b1
-        return int(x), int(y)
-    
+
+    # 4. 두 직선이 서로 평행한 경우 (기울기가 같음)
     if m1 == m2:
-        return None  # 평행선
-    
-    x = (b2 - b1) / (m1 - m2)
-    y = m1 * x + b1
-    return int(x), int(y)
+        return None  # 평행선은 교점 없음
+
+    # 5. 일반적인 경우: 두 선의 교점 계산
+    x = (b2 - b1) / (m1 - m2)  # 두 선의 교점 x좌표 계산
+    y = m1 * x + b1  # x를 이용해 y 좌표 계산
+
+    return int(x), int(y)  # 정수형 튜플로 반환
+
 ```
 
 
@@ -568,36 +590,36 @@ while cap.isOpened():
 
     frame_copy = frame.copy()    
     
-    # 첫번째 프레임에서 라인 검출한 것을 전체 프레임에 적용하기 위해
+    # 첫 번째 프레임에서만 라인 검출을 수행하여 필드 라인을 추정
     if first_frame:
-        gray = cv2.cvtColor(masked_frame, cv2.COLOR_BGR2GRAY) #그레이스케일 변경
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0) # 노이즈 제거
-        edges = cv2.Canny(blurred, 50, 150) #엣지 검출
-        edges_masked = cv2.bitwise_and(edges, edges, mask=border_mask) # 엣지 적용 마스킹 진행
+        gray = cv2.cvtColor(masked_frame, cv2.COLOR_BGR2GRAY)  # 그레이스케일로 변환
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)  # 블러링으로 노이즈 제거
+        edges = cv2.Canny(blurred, 50, 150)  # Canny 알고리즘으로 엣지 검출
+        edges_masked = cv2.bitwise_and(edges, edges, mask=border_mask)  # 필드 테두리 마스크 적용
 
-        #라인 검출
+        # 허프 변환으로 직선 검출
         lines = cv2.HoughLinesP(edges_masked, 1, np.pi / 180, threshold=50,
                                 minLineLength=30, maxLineGap=30)
 
         h, w = frame.shape[:2]
 
-        # HSB를 이용해 흰색 라인 검출
+        # HSV 색공간으로 변환 후 흰색 범위 설정 (필드 라인을 위한 마스크)
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         lower_white = np.array([0, 0, 120])
         upper_white = np.array([180, 60, 255])
 
-        # 라인이 검출되지 않은 경우
+        # 검출된 라인이 있을 경우
         if lines is not None:
             for line in lines:
                 x1, y1, x2, y2 = line[0]
 
-                # 사각형 영역 내부인지 확인, ROI 밖 영역의 라인들 제거
+                # 라인의 양 끝 점이 trapezoid (ROI) 안에 있어야 함
                 p1_in = cv2.pointPolygonTest(trapezoid_pts.astype(np.float32), (float(x1), float(y1)), False) >= 0
                 p2_in = cv2.pointPolygonTest(trapezoid_pts.astype(np.float32), (float(x2), float(y2)), False) >= 0
                 if not (p1_in and p2_in):
                     continue
 
-                # 길이 필터링
+                # 너무 짧은 라인은 제외
                 length = math.hypot(x2 - x1, y2 - y1)
                 if length < 150:
                     continue
@@ -605,149 +627,96 @@ while cap.isOpened():
                 # 각도 계산
                 angle = abs(np.degrees(np.arctan2(y2 - y1, x2 - x1)))
 
-                # y 좌표 중 하나라도 980 이상 혹은 40보다 작으면 무시 진행
-                if angle <= 30 and (y1 >= 990 or y2 >= 990) or (y1<40 or y2<40):
+                # 위/아래 끝에 너무 가까운 라인은 제외
+                if angle <= 30 and (y1 >= 990 or y2 >= 990) or (y1 < 40 or y2 < 40):
                     continue
-                if angle > 30 and (y1 >= 990 or y2 >= 990) or (y1<40 or y2<40):
+                if angle > 30 and (y1 >= 990 or y2 >= 990) or (y1 < 40 or y2 < 40):
                     continue
 
-                # ROI에서 흰색 비율 확인
+                # 라인 영역에서 흰색 비율 확인
                 x_min = max(min(x1, x2), 0)
                 y_min = max(min(y1, y2), 0)
                 x_max = min(max(x1, x2), w - 1)
                 y_max = min(max(y1, y2), h - 1)
-
                 roi = hsv[y_min:y_max + 1, x_min:x_max + 1]
                 if roi.size == 0:
                     continue
 
-                # 해당 색상 범위 검출
+                # 흰색 비율 계산 (0.05보다 작으면 제외)
                 white_mask_roi = cv2.inRange(roi, lower_white, upper_white)
                 white_ratio = cv2.countNonZero(white_mask_roi) / (roi.shape[0] * roi.shape[1] + 1e-5)
-                if white_ratio <= 0.05: #흰색 비율이 제거한 경우
+                if white_ratio <= 0.05:
                     continue
 
-                # 대표 x좌표, 기준 y좌표
+                # 기준점과 기울기 정보 저장
                 rep_x, rep_y = (x1, y1) if y1 < y2 else (x2, y2)
-                # 기준이 되는 y가 더 큰 점의 x좌표
                 y_base_x = x1 if y1 > y2 else x2
-
-                # 검출된 라인들 결합
                 detected_lines.append(((x1, y1, x2, y2), rep_x, angle, y_base_x))
 
+        first_frame = False  # 이후 프레임에서는 라인 재검출하지 않음
 
-        first_frame = False
-
-    # 조건에 맞는 4개 선 필터링
+    # 검출된 라인들을 방향별로 분류
     left_lines = [line for line in detected_lines if max(line[0][0], line[0][2]) < 900 and line[2] > 30]
     right_lines = [line for line in detected_lines if min(line[0][0], line[0][2]) >= 900 and line[2] > 30]
-    top_lines = [line for line in detected_lines if (line[2] <= 40 or line[2] >= 150)and (40<min(line[0][1], line[0][3]) < 100)]
-    bottom_lines = [line for line in detected_lines if (line[2] <= 40 or line[2] >= 150 and min(line[0][1], line[0][3]) >= 900)]
+    top_lines = [line for line in detected_lines if (line[2] <= 40 or line[2] >= 150) and (40 < min(line[0][1], line[0][3]) < 100)]
+    bottom_lines = [line for line in detected_lines if (line[2] <= 40 or line[2] >= 150) and min(line[0][1], line[0][3]) >= 900]
 
-    # 위쪽 선: y좌표 최소
-    if top_lines:
-        top_line = min(top_lines, key=lambda l: min(l[0][1], l[0][3]))
-    else:
-        top_line = None
+    # 상단 라인: 가장 위쪽(y 좌표가 가장 작은 라인)
+    top_line = min(top_lines, key=lambda l: min(l[0][1], l[0][3])) if top_lines else None
+    # 하단 라인: 가장 아래쪽(y 좌표가 가장 큰 라인)
+    bottom_line = max(bottom_lines, key=lambda l: max(l[0][1], l[0][3])) if bottom_lines else None
+    # 왼쪽 라인: 기준 y가 가장 큰 선
+    left_line = max(left_lines, key=lambda l: l[3]) if left_lines else None
+    # 오른쪽 라인: 기준 y가 가장 큰 선
+    right_line = max(right_lines, key=lambda l: l[3]) if right_lines else None
 
-    # 아래쪽 선: y좌표 최대
-    if bottom_lines:
-        bottom_line = max(bottom_lines, key=lambda l: max(l[0][1], l[0][3]))
-    else:
-        bottom_line = None
-
-    # 왼쪽, 오른쪽 선 중 대표 선 선택: (y_base_x가 가장 큰 것)
-    if left_lines:
-        left_line = max(left_lines, key=lambda l: l[3])
-    else:
-        left_line = None
-
-    if right_lines:
-        right_line = max(right_lines, key=lambda l: l[3])
-    else:
-        right_line = None
-
-
-
-    # 위쪽 선: y좌표 최소
-    if top_lines:
-        top_line = min(top_lines, key=lambda l: min(l[0][1], l[0][3]))
-    else:
-        top_line = None
-
-    # 아래쪽 선: y좌표 최대
-    if bottom_lines:
-        bottom_line = max(bottom_lines, key=lambda l: max(l[0][1], l[0][3]))
-    else:
-        bottom_line = None
-
-    # 왼쪽, 오른쪽 선 중 대표 선 선택: (y_base_x가 가장 큰 것)
-    if left_lines:
-        left_line = max(left_lines, key=lambda l: l[3])
-    else:
-        left_line = None
-
-    if right_lines:
-        right_line = max(right_lines, key=lambda l: l[3])
-    else:
-        right_line = None
-
-    # 직선 방정식 계산 (m, b)
+    # 각 직선에 대해 (기울기, 절편) 계산
     lines_eq = {}
     for name, line in zip(["left", "right", "top", "bottom"], [left_line, right_line, top_line, bottom_line]):
         if line is None:
             lines_eq[name] = None
-            continue
-        x1, y1, x2, y2 = line[0]
-        m, b = line_equation(x1, y1, x2, y2)
-        lines_eq[name] = (m, b)
+        else:
+            x1, y1, x2, y2 = line[0]
+            m, b = line_equation(x1, y1, x2, y2)
+            lines_eq[name] = (m, b)
 
-    # 교점 계산
-    # 왼쪽-위, 위-오른쪽, 오른쪽-아래, 아래-왼쪽 순서로 교점
+    # 각 선 간 교점 계산 (왼-위, 위-오, 오-아래, 아래-왼 순서)
     if None not in (lines_eq["left"], lines_eq["top"], lines_eq["right"], lines_eq["bottom"]):
         pt_left_top = intersection(lines_eq["left"], lines_eq["top"])
         pt_top_right = intersection(lines_eq["top"], lines_eq["right"])
         pt_right_bottom = intersection(lines_eq["right"], lines_eq["bottom"])
         pt_bottom_left = intersection(lines_eq["bottom"], lines_eq["left"])
-
         pts = [pt_left_top, pt_top_right, pt_right_bottom, pt_bottom_left]
 
-        # 교점이 모두 계산된 경우 사각형 그리기
+        # 교점이 모두 존재하면 사각형 그리기
         if all(pt is not None for pt in pts):
             for i in range(4):
                 x1, y1 = pts[i]
                 x2, y2 = pts[(i + 1) % 4]
 
-                # 연결하는 두 점을 기준으로 기울기 계산
                 dx = x2 - x1
                 dy = y2 - y1
-                angle = abs(np.degrees(np.arctan2(dy, dx)))
+                angle = abs(np.degrees(np.arctan2(dy, dx)))  # 라인의 기울기
 
-                # 기울기 <= 30도 파랑, >30도 빨강
-                #사이드 라인
-                if angle > 40 and angle < 150:
-                    color = (57, 255, 20)  # 형광 초록 (BGR)
+                # 사이드 라인 (수직에 가까움): 형광 초록
+                if 40 < angle < 150:
+                    color = (57, 255, 20)
                     cv2.line(frame_copy, (x1, y1), (x2, y2), color, 3)
 
-                    if max(x1, x2) < 900:  # 빨간 선이 화면 왼쪽에 위치한 경우만
-                        m, b = line_equation(x1, y1, x2, y2)
+                    # 왼쪽이면 throwin 기준점 저장
+                    m, b = line_equation(x1, y1, x2, y2)
+                    if max(x1, x2) < 900:
                         if m is not None:
-                            # throwin 기준으로 사용할 선의 x 경계값 저장
-                            throwin_line_x = max(x1, x2)  # 오른쪽 끝
-                        left_m=m #왼쪽 기울기
-                        left_b=b #왼쪽
+                            throwin_line_x = max(x1, x2)
+                        left_m, left_b = m, b
                     else:
-                        m, b = line_equation(x1, y1, x2, y2)
                         if m is not None:
-                            # throwin 기준으로 사용할 선의 x 경계값 저장
-                            throwin_line_x = max(x1, x2)  # 오른쪽 끝
-                        right_m=m #왼쪽 기울기
-                        right_b=b #왼쪽
-                        
-                #코너킥, 골라인
-                # 빨간 선 그리기 및 노란 선 그리기
+                            throwin_line_x = max(x1, x2)
+                        right_m, right_b = m, b
+
+                # 골라인 또는 코너킥 라인 (수평에 가까움): 형광 보라
                 else:
-                    color = (255, 0, 255)  # 형광 보라 (BGR)
+                    color = (255, 0, 255)
                     cv2.line(frame_copy, (x1, y1), (x2, y2), color, 3)
 
                     m, b = line_equation(x1, y1, x2, y2)
@@ -759,13 +728,15 @@ while cap.isOpened():
                         y_left = int(m * x_left + b)
                         y_right = int(m * x_right + b)
 
-                        # 위의 점 좌표 추가
-                        h, w = frame.shape[:2]
+                        # 유효 범위 내의 점이면 노란 선 그리기
                         if 0 <= x_left < w and 0 <= x_right < w and 0 <= y_left < h and 0 <= y_right < h:
-                            cv2.line(frame_copy, (x_left, y_left), (x_right, y_right), (0, 255, 255), 4)  # 노란색
-                            if y_left <100 or y_right <100:
-                                yellow_line_top=(x_left, x_right, y_left, y_right)
+                            cv2.line(frame_copy, (x_left, y_left), (x_right, y_right), (0, 255, 255), 4)
+
+                            # 최상단 노란선이면 별도 저장
+                            if y_left < 100 or y_right < 100:
+                                yellow_line_top = (x_left, x_right, y_left, y_right)
                             yellow_line = (x_left, x_right, y_left, y_right)
+
 ```
 
 
@@ -787,16 +758,29 @@ trapezoid_pts = np.array([[750, 40], [480, 995], [1760, 995], [1350, 40]]) # 관
 
 
 frame_copy = frame.copy()    
-# 회색 바탕, 관심 없는 영역 어둡게 하기 위해
+
+# 관심 있는 영역(사다리꼴 영역)을 제외한 나머지 화면을 어둡게 처리하여 강조하기 위한 코드
+# 사다리꼴 모양의 관심 영역 좌표 설정 (좌상, 좌하, 우하, 우상)
 trapezoid_pts = np.array([[740, 20], [430, 1050], [1830, 1050], [1360, 30]])
+# 원본 프레임과 동일한 크기의 검은 마스크 생성
 mask = np.zeros_like(frame_copy, dtype=np.uint8)
+# 관심 영역을 하얀색으로 채움
 cv2.fillPoly(mask, [trapezoid_pts], (255, 255, 255))
+# 관심 영역의 반전 마스크 생성 
 inv_mask = cv2.bitwise_not(mask)
+# 검은 배경 이미지 생성
 black_overlay = np.zeros_like(frame_copy, dtype=np.uint8)
-alpha = 0.5 #투명도
-overlay = cv2.addWeighted(cv2.bitwise_and(black_overlay, inv_mask), alpha,
-                        cv2.bitwise_and(frame_copy, inv_mask), 1 - alpha, 0)
+# 투명도 설정 
+alpha = 0.5
+# 관심 없는 영역만 오버레이 처리: 검은 배경과 원본 영상의 비율로 합성
+overlay = cv2.addWeighted(
+    cv2.bitwise_and(black_overlay, inv_mask), alpha,  # 어두운 영역
+    cv2.bitwise_and(frame_copy, inv_mask), 1 - alpha, # 원본 영역
+    0  # 감마 보정 없음
+)
+# 관심 영역은 원본 영상 그대로, 나머지는 오버레이 적용된 영상 결합
 frame_copy = cv2.bitwise_or(overlay, cv2.bitwise_and(frame_copy, mask))
+
 ```
 
 
@@ -821,88 +805,96 @@ current_players = {}
 results = model.track(source=frame, persist=True, conf=0.001, iou=0.5, classes=[0], tracker="bytetrack.yaml")
     
 
-# 사람을 찾은 경우
+# 사람을 감지한 경우 처리
 if results and results[0].boxes is not None:
     boxes = results[0].boxes
-    xyxy = boxes.xyxy.cpu().numpy()
-    confs = boxes.conf.cpu().numpy()
-    ids = boxes.id.cpu().numpy().astype(int) if boxes.id is not None else range(len(xyxy))
+    xyxy = boxes.xyxy.cpu().numpy()  # 사람마다 경계 박스 좌표 (x1, y1, x2, y2)
+    confs = boxes.conf.cpu().numpy()  # 각 박스의 신뢰도 점수
+    ids = boxes.id.cpu().numpy().astype(int) if boxes.id is not None else range(len(xyxy))  # 객체 ID (없으면 인덱스)
 
     for i in range(len(xyxy)):
-        x1, y1, x2, y2 = map(int, xyxy[i])
+        x1, y1, x2, y2 = map(int, xyxy[i])  # 경계 박스 좌표 정수화
         conf = confs[i]
-        obj_id = ids[i]
+        obj_id = ids[i]  # 각 객체의 고유 ID
 
+        # 중심 좌표 계산
         cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
 
-        # 좌표가 1500보다 크면 제외, 축구장 밖에 있는 사람 제거하기 위해
+        # 경기장 밖에 있는 경우 무시
         if cx > 1500 or cy > 1500:
             continue
 
-
+        # 박스 좌표가 이미지 영역을 넘지 않도록 보정
         x1_clamped = max(0, x1)
         y1_clamped = max(0, y1)
         x2_clamped = min(frame.shape[1], x2)
         y2_clamped = min(frame.shape[0], y2)
+
+        # 선수의 ROI(영역) 추출
         roi = frame[y1_clamped:y2_clamped, x1_clamped:x2_clamped]
 
+        # 빈 ROI는 무시
         if roi.size == 0:
             continue
 
-        # HSV 변경, 팀 색상 구분하기 위해
+        # HSV 색공간으로 변환 (팀 분류를 위해)
         hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
-        # 유니폼 색상에 따라 빨간팀, 파란팀 구분 진행
-        # 선택할 빨간색의 범위
+        # 빨간색 범위 마스크 생성 (두 개의 hue 영역 + 마젠타 계열)
         red1 = cv2.inRange(hsv_roi, np.array([0, 40, 40]), np.array([20, 255, 255]))
         red2 = cv2.inRange(hsv_roi, np.array([160, 40, 40]), np.array([180, 255, 255]))
         magenta = cv2.inRange(hsv_roi, np.array([140, 40, 40]), np.array([160, 255, 255]))
         red_mask = cv2.bitwise_or(cv2.bitwise_or(red1, red2), magenta)
-        red_ratio = np.count_nonzero(red_mask) / red_mask.size # 해당 사람이 빨간색을 포함하고 있는 비율
+        red_ratio = np.count_nonzero(red_mask) / red_mask.size  # 빨간색 비율 계산
 
-        #선택할 파란색의 범위
+        # 파란색 범위 마스크 생성
         blue_mask = cv2.inRange(hsv_roi, np.array([90, 70, 50]), np.array([130, 255, 255]))
-        blue_ratio = np.count_nonzero(blue_mask) / blue_mask.size # 해당 사람이 파란색을 포함하고 있는 비율
+        blue_ratio = np.count_nonzero(blue_mask) / blue_mask.size  # 파란색 비율 계산
 
-        red_weight = 3.0 # 빨간팀 사람들이 잘 안 잡하기에 빨간 색에 가중치를 좀더 줌
-        blue_weight = 2.0 # 파란팀 색생의 가중치
+        # 색상 가중치 (빨간팀 감지를 더 강화함)
+        red_weight = 3.0
+        blue_weight = 2.0
         red_weighted = red_ratio * red_weight
         blue_weighted = blue_ratio * blue_weight
 
-        #팀을 구별할 threshold 값
+        # 팀 분류 기준 threshold
         red_thresh = 0.01
         blue_thresh = 0.01
 
-        # 팀 구별 진행
+        # 색상 비율에 따라 팀 분류
         if red_weighted > blue_weighted and red_weighted > red_thresh:
-            team_color = (0, 0, 255)  # 빨강팀 (BGR)
+            team_color = (0, 0, 255)  # 빨간팀 (BGR)
             team_name = "Red Team"
         elif blue_weighted > red_weighted and blue_weighted > blue_thresh:
-            team_color = (255, 0, 0)  # 파랑팀
+            team_color = (255, 0, 0)  # 파란팀 (BGR)
             team_name = "Blue Team"
         else:
-            team_color = (0, 255, 0)  # 알 수 없음 (초록)
+            team_color = (0, 255, 0)  # 알 수 없음 -> 초록색
             team_name = "Unknown"
 
-        # 현재 선수들의 좌표 추출
-        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+        # 현재 선수의 중심 좌표 저장
         current_players[obj_id] = (cx, cy)
-        player_colors[obj_id] = team_color # 선수들의 팀 분류 진행
+        player_colors[obj_id] = team_color  # 해당 선수 팀 컬러 저장
 
-        # 속도 및 활동량 계산
+        # 속도 및 총 이동거리 계산
         current_pos = (cx, cy)
         if obj_id in player_last_positions:
-            prev_pos = player_last_positions[obj_id] # 기존에 움직인 값, 활동량을 표현하기 위해
-            pixel_dist = euclidean(prev_pos, current_pos)
-            real_dist_m = pixel_dist * pixel_to_meter # 움직인 거리에 픽셀 당 m 고려
-            speed_kmh = (real_dist_m * fps) * 3.6 # 속도 변환 km/h 단위
-            player_distances[obj_id] += real_dist_m #실제로 움직인 거리 산출
+            prev_pos = player_last_positions[obj_id]  # 이전 위치
+            pixel_dist = euclidean(prev_pos, current_pos)  # 픽셀 거리 계산
+            real_dist_m = pixel_dist * pixel_to_meter  # 실제 거리(m)로 변환
+            speed_kmh = (real_dist_m * fps) * 3.6  # 속도 계산 (km/h)
+            player_distances[obj_id] += real_dist_m  # 누적 이동거리 갱신
 
-            # 이미지에 속도와 활동량 표현 진행
-            cv2.putText(frame_copy, f"{speed_kmh:.1f} km/h", (cx, cy + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, team_color, 2)
-            cv2.putText(frame_copy, f"Total: {player_distances[obj_id]:.1f} m", (cx, cy + 35), cv2.FONT_HERSHEY_SIMPLEX, 0.5, team_color, 2)
+            # 속도와 총 이동거리 영상에 표시
+            cv2.putText(frame_copy, f"{speed_kmh:.1f} km/h", (cx, cy + 15),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, team_color, 2)
+            cv2.putText(frame_copy, f"Total: {player_distances[obj_id]:.1f} m", (cx, cy + 35),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, team_color, 2)
 
+        # 현재 위치 갱신
         player_last_positions[obj_id] = current_pos
+
+        # 사람 경계 박스 그리기
         cv2.rectangle(frame_copy, (x1, y1), (x2, y2), team_color, 2)
 ```
 
