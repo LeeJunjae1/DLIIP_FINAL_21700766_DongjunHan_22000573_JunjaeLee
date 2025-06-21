@@ -6,7 +6,7 @@
 
 **Github:**  [repository link](https://github.com/LeeJunjae1/DLIIP_FINAL_21700766_DongjunHan_22000573_JunjaeLee)
 
-**PDF version:** [PDF](./DLIP_FINAL_21700766_DongjunHan_22000573_JunjaeLee.pdf)
+**PDF version:** [PDF](./DLIP_FINAL_21700766_HanDongjun_22000573_LeeJunJae.pdf)
 
 **Demo Video**: [Youtube_link](https://www.youtube.com/watch?v=00-XCQsEvEs)
 
